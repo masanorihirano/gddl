@@ -251,26 +251,32 @@ func main() {
 				}
 				fmt.Print(printStr)
 			} else {
-				includes := false
-				for _, key := range ListDirectory(flag.Arg(1)) {
-					if key == flag.Arg(2) {
-						includes = true
-						break
+				if flag.Arg(3) == "" {
+					includes := false
+					for _, key := range ListDirectory(flag.Arg(1)) {
+						if key == flag.Arg(2) {
+							includes = true
+							break
+						}
 					}
-				}
-				if !includes {
-					fmt.Printf("Cannot found directory: %s", flag.Arg(2))
+					if !includes {
+						fmt.Printf("Cannot found directory: %s", flag.Arg(2))
+						return
+					}
+					printStr := ""
+					for _, key := range ListFiles(flag.Arg(1), flag.Arg(2)) {
+						if printStr == "" {
+							printStr = key
+						} else {
+							printStr += "\n" + key
+						}
+					}
+					fmt.Print(printStr)
+				} else {
+					showUsage()
+					fmt.Print("Did you mean 'download'?")
 					return
 				}
-				printStr := ""
-				for _, key := range ListFiles(flag.Arg(1), flag.Arg(2)) {
-					if printStr == "" {
-						printStr = key
-					} else {
-						printStr += "\n" + key
-					}
-				}
-				fmt.Print(printStr)
 			}
 		}
 		return
