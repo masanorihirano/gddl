@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/mholt/archiver/v3"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/drive/v3"
@@ -13,6 +15,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -38,10 +41,10 @@ func init() {
 	url := Config.RepositoryInfoUrl
 
 	response, err := http.Get(url)
-	defer response.Body.Close()
 	if err != nil {
 		panic(err)
 	}
+	defer response.Body.Close()
 	byteArray, err := ioutil.ReadAll(response.Body)
 	if err != nil {
 		panic(err)
@@ -120,7 +123,7 @@ func getService() *drive.Service {
 		panic(err)
 	}
 
-	config, err := google.ConfigFromJSON(byteArray, drive.DriveMetadataReadonlyScope)
+	config, err := google.ConfigFromJSON(byteArray, drive.DriveScope)
 	if err != nil {
 		log.Fatalf("Unable to parse client secret file to config: %v", err)
 	}
@@ -186,6 +189,8 @@ func ListFiles(repository string, directory string) []string {
 		for _, file := range result.Files {
 			if strings.HasSuffix(file.Name, ".tar.xz") {
 				results = append(results, file.Name[:len(file.Name)-7])
+			} else if strings.HasSuffix(file.Name, ".tar.gz") {
+				results = append(results, file.Name[:len(file.Name)-7])
 			} else {
 				results = append(results, file.Name)
 			}
@@ -202,12 +207,80 @@ func ListFiles(repository string, directory string) []string {
 	return results
 }
 
+func DownloadAndSave(path string, repository string, directory string, fileName string, saveForce bool, unfreeze bool) {
+	service, file := getDirectory(repository, directory)
+	result, err := service.Files.List().Corpora("teamDrive").IncludeItemsFromAllDrives(true).SupportsTeamDrives(true).TeamDriveId(Repositories[repository]).Q(fmt.Sprintf("'%s' in parents and (name='%s' or name='%s.tar.xz' or name='%s.tar.gz')", file.Id, fileName, fileName, fileName)).PageSize(1).Do()
+	if err != nil {
+		panic(err)
+	}
+	if len(result.Files) != 1 {
+		panic("Error while searching the targeted file.")
+	}
+	log.Println("Starting download...")
+	response, err := service.Files.Get(result.Files[0].Id).Download()
+	if err != nil {
+		panic(err)
+	}
+	_, err = os.Stat(filepath.Join(path, result.Files[0].Name))
+	if !os.IsNotExist(err) && !saveForce {
+		panic(fmt.Sprintf("File already exist: %s", filepath.Join(path, result.Files[0].Name)))
+	}
+	fp, err := os.Create(filepath.Join(path, result.Files[0].Name))
+	if err != nil {
+		panic(err)
+	}
+	buffer := bufio.NewWriter(fp)
+	_, err = buffer.ReadFrom(response.Body)
+	if err != nil {
+		panic(err)
+	}
+	err = fp.Close()
+	if err != nil {
+		panic(err)
+	}
+	log.Println("Ended download...")
+	if strings.HasSuffix(result.Files[0].Name, ".tar.xz") && unfreeze {
+		log.Println("Starting unfreezing...")
+		xzArchiver := archiver.NewTarXz()
+		xzArchiver.OverwriteExisting = saveForce
+		err = xzArchiver.Unarchive(filepath.Join(path, result.Files[0].Name), filepath.Join(path))
+		if err != nil {
+			panic(err)
+		}
+		if unfreeze {
+			err = os.Remove(filepath.Join(path, result.Files[0].Name))
+			if err != nil {
+				panic(err)
+			}
+		}
+		log.Println("Ended unfreezing...")
+	} else if strings.HasSuffix(result.Files[0].Name, ".tar.gz") && unfreeze {
+		log.Println("Starting unfreezing...")
+		gzArchiver := archiver.NewTarGz()
+		gzArchiver.SingleThreaded = false
+		gzArchiver.OverwriteExisting = saveForce
+		err = gzArchiver.Unarchive(filepath.Join(path, result.Files[0].Name), filepath.Join(path, fileName))
+		if err != nil {
+			panic(err)
+		}
+		if unfreeze {
+			err := os.Remove(filepath.Join(path, result.Files[0].Name))
+			if err != nil {
+				panic(err)
+			}
+		}
+		log.Println("Ended unfreezing...")
+	}
+	log.Println("Ended processing")
+	return
+}
+
 func showUsage() {
 	fmt.Printf("Usage (only arguments):\n" +
 		"\tShow all repositories:\n\t\tshow\n" +
 		"\tShow folders in a repository:\n\t\tshow [repository]\n" +
 		"\tShow download candidates in a folder:\n\t\tshow [repository] [folder]\n" +
-		"\tDownload:\n\t\tdownload [repository] [folder] [target]\n" +
+		"\tDownload:\n\t\tdownload [repository] [folder] [file] [path(optional)]\n" +
 		"\tUpload:\n\t\tupload [repository] [folder] [file/folder]\n")
 }
 
@@ -280,5 +353,22 @@ func main() {
 			}
 		}
 		return
+	} else if flag.Arg(0) == "download" {
+		if len(flag.Args()) > 4 {
+			showUsage()
+			return
+		} else {
+			var dir string
+			var err error
+			if flag.Arg(4) != "" {
+				dir = flag.Arg(4)
+			} else {
+				dir, err = os.Getwd()
+				if err != nil {
+					log.Fatal(err)
+				}
+			}
+			DownloadAndSave(dir, flag.Arg(1), flag.Arg(2), flag.Arg(3), false, true)
+		}
 	}
 }
