@@ -15,9 +15,7 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -60,11 +58,12 @@ func getClient(config *oauth2.Config) (*http.Client, error) {
 	// The file token.json stores the user's access and refresh tokens, and is
 	// created automatically when the authorization flow completes for the first
 	// time.
-	pc, file, line, ok := runtime.Caller(0)
-	if !ok {
-		panic(fmt.Sprintf("Error while getting directory: %v, %s, %v", pc, file, line))
+	ex, err := os.Executable()
+	if err != nil {
+		panic(err)
 	}
-	tokFile := path.Join(path.Dir(file), "token.json")
+	dir := filepath.Dir(ex)
+	tokFile := filepath.Join(dir, "token.json")
 	tok, err := tokenFromFile(tokFile)
 	if err != nil {
 		tok, err2 := getTokenFromWeb(config)
