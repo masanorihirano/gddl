@@ -61,8 +61,8 @@ func getClient(config *oauth2.Config) (*http.Client, error) {
 	// created automatically when the authorization flow completes for the first
 	// time.
 	pc, file, line, ok := runtime.Caller(0)
-	if ok {
-		println(pc, file, line)
+	if !ok {
+		panic("Error while getting directory")
 	}
 	tokFile := path.Join(path.Dir(file), "token.json")
 	tok, err := tokenFromFile(tokFile)
