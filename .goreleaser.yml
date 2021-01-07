@@ -1,4 +1,4 @@
-project_name: git-bump
+project_name: gddl
 env:
   - GO111MODULE=on
 before:
@@ -6,17 +6,24 @@ before:
     - go mod tidy
 builds:
   - main: .
-    binary: git-bump
+    binary: gddl
     ldflags:
       - -s -w
       - -X main.Version={{.Version}}
       - -X main.Revision={{.ShortCommit}}
+    goos:
+      - windows
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - 386
     env:
       - CGO_ENABLED=0
 archives:
   - name_template: '{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}'
     replacements:
-      darwin: darwin
+      darwin: macOS
       linux: linux
       windows: windows
       386: i386
@@ -24,5 +31,8 @@ archives:
     format_overrides:
       - goos: windows
         format: zip
+    wrap_in_directory: false
+    files:
+      - none*
 release:
   prerelease: auto
