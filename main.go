@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"github.com/mholt/archiver/v3"
@@ -56,35 +57,41 @@ func init() {
 }
 
 // Retrieve a token, saves the token, then returns the generated client.
-func getClient(config *oauth2.Config) *http.Client {
+func getClient(config *oauth2.Config) (*http.Client, error) {
 	// The file token.json stores the user's access and refresh tokens, and is
 	// created automatically when the authorization flow completes for the first
 	// time.
 	tokFile := "token.json"
 	tok, err := tokenFromFile(tokFile)
 	if err != nil {
-		tok = getTokenFromWeb(config)
-		saveToken(tokFile, tok)
+		tok, err2 := getTokenFromWeb(config)
+		if err2 != nil {
+			return nil, errors.New(fmt.Sprintf("Error while getting token: %s, %s", err, err2))
+		}
+		err3 := saveToken(tokFile, tok)
+		if err3 != nil {
+			return nil, err3
+		}
 	}
-	return config.Client(context.Background(), tok)
+	return config.Client(context.Background(), tok), nil
 }
 
 // Request a token from the web, then returns the retrieved token.
-func getTokenFromWeb(config *oauth2.Config) *oauth2.Token {
+func getTokenFromWeb(config *oauth2.Config) (*oauth2.Token, error) {
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
 	fmt.Printf("Go to the following link in your browser then type the "+
 		"authorization code: \n%v\n", authURL)
 
 	var authCode string
 	if _, err := fmt.Scan(&authCode); err != nil {
-		log.Fatalf("Unable to read authorization code %v", err)
+		return nil, errors.New(fmt.Sprintf("Unable to read authorization code %v", err))
 	}
 
 	tok, err := config.Exchange(context.TODO(), authCode)
 	if err != nil {
-		log.Fatalf("Unable to retrieve token from web %v", err)
+		return nil, errors.New(fmt.Sprintf("Unable to retrieve token from web %v", err))
 	}
-	return tok
+	return tok, nil
 }
 
 // Retrieves a token from a local file.
@@ -100,40 +107,44 @@ func tokenFromFile(file string) (*oauth2.Token, error) {
 }
 
 // Saves a token to a file path.
-func saveToken(path string, token *oauth2.Token) {
+func saveToken(path string, token *oauth2.Token) error {
 	fmt.Printf("Saving credential file to: %s\n", path)
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
-		log.Fatalf("Unable to cache oauth token: %v", err)
+		return errors.New(fmt.Sprintf("Unable to cache oauth token: %v", err))
 	}
 	defer f.Close()
 	json.NewEncoder(f).Encode(token)
+	return nil
 }
 
-func getService() *drive.Service {
+func getService() (*drive.Service, error) {
 	url := Config.CredentialUrl
 
 	response, err := http.Get(url)
 	defer response.Body.Close()
 	if err != nil {
-		panic(err)
+		return nil, errors.New(fmt.Sprintf("Unable to connect online credential file: %v", err))
 	}
 	byteArray, err := ioutil.ReadAll(response.Body)
 	if err != nil {
-		panic(err)
+		return nil, errors.New(fmt.Sprintf("Unable to load online credential file: %v", err))
 	}
 
 	config, err := google.ConfigFromJSON(byteArray, drive.DriveScope)
 	if err != nil {
-		log.Fatalf("Unable to parse client secret file to config: %v", err)
+		return nil, errors.New(fmt.Sprintf("Unable to parse client secret file to config: %v", err))
 	}
-	client := getClient(config)
+	client, err := getClient(config)
+	if err != nil {
+		return nil, err
+	}
 
 	srv, err := drive.New(client)
 	if err != nil {
-		log.Fatalf("Unable to retrieve Drive client: %v", err)
+		return nil, errors.New(fmt.Sprintf("Unable to retrieve Drive client: %v", err))
 	}
-	return srv
+	return srv, nil
 }
 
 func ListRepository() []string {
@@ -144,13 +155,16 @@ func ListRepository() []string {
 	return result
 }
 
-func ListDirectory(repository string) []string {
-	service := getService()
+func ListDirectory(repository string) ([]string, error) {
+	service, err := getService()
+	if err != nil {
+		return nil, errors.New(fmt.Sprintf("Unable to get service: %v", err))
+	}
 	results := make([]string, 0)
 	query := service.Files.List().Corpora("teamDrive").IncludeItemsFromAllDrives(true).SupportsTeamDrives(true).TeamDriveId(Repositories[repository]).Q(fmt.Sprintf("mimeType='application/vnd.google-apps.folder' and '%s' in parents", Repositories[repository])).PageSize(1000)
 	result, err := query.Do()
 	if err != nil {
-		panic(err)
+		return nil, errors.New(fmt.Sprintf("Unable to list google drive directory: %v", err))
 	}
 	for {
 		for _, file := range result.Files {
@@ -161,29 +175,35 @@ func ListDirectory(repository string) []string {
 		}
 		result, err = query.PageToken(result.NextPageToken).Do()
 		if err != nil {
-			panic(err)
+			return nil, errors.New(fmt.Sprintf("Unable to list google drive directory: %v", err))
 		}
 	}
 	sort.Strings(results)
-	return results
+	return results, nil
 }
 
-func getDirectory(repository string, directory string) (*drive.Service, *drive.File) {
-	service := getService()
+func getDirectory(repository string, directory string) (*drive.Service, *drive.File, error) {
+	service, err := getService()
+	if err != nil {
+		return nil, nil, errors.New(fmt.Sprintf("Unable to get service: %v", err))
+	}
 	result, err := service.Files.List().Corpora("teamDrive").IncludeItemsFromAllDrives(true).SupportsTeamDrives(true).TeamDriveId(Repositories[repository]).Q(fmt.Sprintf("mimeType='application/vnd.google-apps.folder' and '%s' in parents and name='%s'", Repositories[repository], directory)).PageSize(1).Do()
 	if err != nil {
-		panic(err)
+		return nil, nil, errors.New(fmt.Sprintf("Unable to list google drive directory: %v", err))
 	}
-	return service, result.Files[0]
+	return service, result.Files[0], nil
 }
 
-func ListFiles(repository string, directory string) []string {
-	service, file := getDirectory(repository, directory)
+func ListFiles(repository string, directory string) ([]string, error) {
+	service, file, err := getDirectory(repository, directory)
+	if err != nil {
+		return nil, err
+	}
 	query := service.Files.List().Corpora("teamDrive").IncludeItemsFromAllDrives(true).SupportsTeamDrives(true).TeamDriveId(Repositories[repository]).Q(fmt.Sprintf("'%s' in parents", file.Id)).PageSize(1000)
 	results := make([]string, 0)
 	result, err := query.Do()
 	if err != nil {
-		panic(err)
+		return nil, errors.New(fmt.Sprintf("Unable to list google drive directory: %v", err))
 	}
 	for {
 		for _, file := range result.Files {
@@ -200,43 +220,46 @@ func ListFiles(repository string, directory string) []string {
 		}
 		result, err = query.PageToken(result.NextPageToken).Do()
 		if err != nil {
-			panic(err)
+			return nil, errors.New(fmt.Sprintf("Unable to list google drive directory: %v", err))
 		}
 	}
 	sort.Strings(results)
-	return results
+	return results, nil
 }
 
-func DownloadAndSave(path string, repository string, directory string, fileName string, saveForce bool, unfreeze bool) {
-	service, file := getDirectory(repository, directory)
+func DownloadAndSave(path string, repository string, directory string, fileName string, saveForce bool, unfreeze bool) error {
+	service, file, err := getDirectory(repository, directory)
+	if err != nil {
+		return err
+	}
 	result, err := service.Files.List().Corpora("teamDrive").IncludeItemsFromAllDrives(true).SupportsTeamDrives(true).TeamDriveId(Repositories[repository]).Q(fmt.Sprintf("'%s' in parents and (name='%s' or name='%s.tar.xz' or name='%s.tar.gz')", file.Id, fileName, fileName, fileName)).PageSize(1).Do()
 	if err != nil {
-		panic(err)
+		return errors.New(fmt.Sprintf("Unable to list google drive directory: %v", err))
 	}
 	if len(result.Files) != 1 {
-		panic("Error while searching the targeted file.")
+		return errors.New("error while searching the targeted file")
 	}
 	log.Println("Starting download...")
 	response, err := service.Files.Get(result.Files[0].Id).Download()
 	if err != nil {
-		panic(err)
+		return errors.New(fmt.Sprintf("failed to download: %v", err))
 	}
 	_, err = os.Stat(filepath.Join(path, result.Files[0].Name))
 	if !os.IsNotExist(err) && !saveForce {
-		panic(fmt.Sprintf("File already exist: %s", filepath.Join(path, result.Files[0].Name)))
+		return errors.New(fmt.Sprintf("File already exist: %s", filepath.Join(path, result.Files[0].Name)))
 	}
 	fp, err := os.Create(filepath.Join(path, result.Files[0].Name))
 	if err != nil {
-		panic(err)
+		return errors.New(fmt.Sprintf("Failed to make file: %s", filepath.Join(path, result.Files[0].Name)))
 	}
 	buffer := bufio.NewWriter(fp)
 	_, err = buffer.ReadFrom(response.Body)
 	if err != nil {
-		panic(err)
+		return errors.New(fmt.Sprintf("Failed to get data from google drive: %s", filepath.Join(path, result.Files[0].Name)))
 	}
 	err = fp.Close()
 	if err != nil {
-		panic(err)
+		return errors.New(fmt.Sprintf("Failed to close file: %s", filepath.Join(path, result.Files[0].Name)))
 	}
 	log.Println("Ended download...")
 	if strings.HasSuffix(result.Files[0].Name, ".tar.xz") && unfreeze {
@@ -245,12 +268,12 @@ func DownloadAndSave(path string, repository string, directory string, fileName 
 		xzArchiver.OverwriteExisting = saveForce
 		err = xzArchiver.Unarchive(filepath.Join(path, result.Files[0].Name), filepath.Join(path))
 		if err != nil {
-			panic(err)
+			return errors.New(fmt.Sprintf("Failed to unarchive: %s", filepath.Join(path, result.Files[0].Name)))
 		}
 		if unfreeze {
 			err = os.Remove(filepath.Join(path, result.Files[0].Name))
 			if err != nil {
-				panic(err)
+				return errors.New(fmt.Sprintf("Failed to delete: %s", filepath.Join(path, result.Files[0].Name)))
 			}
 		}
 		log.Println("Ended unfreezing...")
@@ -261,18 +284,18 @@ func DownloadAndSave(path string, repository string, directory string, fileName 
 		gzArchiver.OverwriteExisting = saveForce
 		err = gzArchiver.Unarchive(filepath.Join(path, result.Files[0].Name), filepath.Join(path, fileName))
 		if err != nil {
-			panic(err)
+			return errors.New(fmt.Sprintf("Failed to unarchive: %s", filepath.Join(path, result.Files[0].Name)))
 		}
 		if unfreeze {
 			err := os.Remove(filepath.Join(path, result.Files[0].Name))
 			if err != nil {
-				panic(err)
+				return errors.New(fmt.Sprintf("Failed to delete: %s", filepath.Join(path, result.Files[0].Name)))
 			}
 		}
 		log.Println("Ended unfreezing...")
 	}
 	log.Println("Ended processing")
-	return
+	return nil
 }
 
 func showUsage() {
@@ -315,7 +338,11 @@ func main() {
 			}
 			if flag.Arg(2) == "" {
 				printStr := ""
-				for _, key := range ListDirectory(flag.Arg(1)) {
+				directories, err := ListDirectory(flag.Arg(1))
+				if err != nil {
+					panic(err)
+				}
+				for _, key := range directories {
 					if printStr == "" {
 						printStr = key
 					} else {
@@ -326,7 +353,11 @@ func main() {
 			} else {
 				if flag.Arg(3) == "" {
 					includes := false
-					for _, key := range ListDirectory(flag.Arg(1)) {
+					directories, err := ListDirectory(flag.Arg(1))
+					if err != nil {
+						panic(err)
+					}
+					for _, key := range directories {
 						if key == flag.Arg(2) {
 							includes = true
 							break
@@ -337,7 +368,11 @@ func main() {
 						return
 					}
 					printStr := ""
-					for _, key := range ListFiles(flag.Arg(1), flag.Arg(2)) {
+					fileList, err := ListFiles(flag.Arg(1), flag.Arg(2))
+					if err != nil {
+						panic(err)
+					}
+					for _, key := range fileList {
 						if printStr == "" {
 							printStr = key
 						} else {
@@ -365,10 +400,13 @@ func main() {
 			} else {
 				dir, err = os.Getwd()
 				if err != nil {
-					log.Fatal(err)
+					panic(err)
 				}
 			}
-			DownloadAndSave(dir, flag.Arg(1), flag.Arg(2), flag.Arg(3), false, true)
+			err = DownloadAndSave(dir, flag.Arg(1), flag.Arg(2), flag.Arg(3), false, true)
+			if err != nil {
+				panic(err)
+			}
 		}
 	}
 }
