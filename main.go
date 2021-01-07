@@ -11,7 +11,6 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/drive/v3"
-	"gopkg.in/ini.v1"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -30,13 +29,9 @@ var Config ConfigList
 var Repositories map[string]string
 
 func init() {
-	cfg, err := ini.Load("config.ini")
-	if err != nil {
-		panic("Error while loading config file in gddl.")
-	}
 	Config = ConfigList{
-		CredentialUrl:     cfg.Section("config").Key("credential_url").String(),
-		RepositoryInfoUrl: cfg.Section("config").Key("repository_info_url").String(),
+		CredentialUrl:     "https://gist.githubusercontent.com/masanorihirano/d9464a1d8684d794d7e0a0136347f9bb/raw/gddl-credential",
+		RepositoryInfoUrl: "https://gist.githubusercontent.com/masanorihirano/d9464a1d8684d794d7e0a0136347f9bb/raw/gddl-settings",
 	}
 
 	url := Config.RepositoryInfoUrl
