@@ -1,6 +1,6 @@
 project_name: git-bump
 env:
-  - GO111MODULE=off go get blah
+  - GO111MODULE=off
 before:
   hooks:
     - go mod tidy
