@@ -60,10 +60,10 @@ func getClient(config *oauth2.Config) (*http.Client, error) {
 	// time.
 	ex, err := os.Executable()
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	dir := filepath.Dir(ex)
-	tokFile := filepath.Join(dir, "token.json")
+	tokFile := filepath.Join(dir, "gddl_token.json")
 	tok, err := tokenFromFile(tokFile)
 	if err != nil {
 		tok, err2 := getTokenFromWeb(config)
@@ -74,6 +74,10 @@ func getClient(config *oauth2.Config) (*http.Client, error) {
 		if err3 != nil {
 			return nil, err3
 		}
+	}
+	tok, err = tokenFromFile(tokFile)
+	if err != nil {
+		return nil, err
 	}
 	return config.Client(context.Background(), tok), nil
 }
