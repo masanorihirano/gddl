@@ -314,6 +314,9 @@ func GetFileSize(repository string, directory string, fileName string) (int64, e
 	if len(result.Files) != 1 {
 		return 0, errors.New("error while searching the targeted file")
 	}
-	log.Println("Starting download...")
-	return result.Files[0].Size, nil
+	info, err := service.Files.Get(result.Files[0].Id).SupportsTeamDrives(true).Fields("size").Do()
+	if err != nil {
+		return 0, errors.New(fmt.Sprintf("Unable to get information from google drive: %v", err))
+	}
+	return info.Size, nil
 }
