@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
+	"github.com/masanorihirano/gddl/gddl"
 	"os"
 	"strconv"
 	"time"
@@ -58,7 +59,7 @@ func selectMenu() {
 			break
 		}
 		var repository string
-		repositories := ListRepository()
+		repositories := gddl.ListRepository()
 		fmt.Println("Please choose repository:")
 		for j, key := range repositories {
 			fmt.Println(fmt.Sprintf("%d: %s", j, key))
@@ -84,7 +85,7 @@ func selectMenu() {
 		fmt.Println(fmt.Sprintf("your choice: %s", repository))
 		fmt.Println()
 		var directory string
-		directories, err := ListDirectory(repository)
+		directories, err := gddl.ListDirectory(repository)
 		if err != nil {
 			panic(err)
 		}
@@ -114,7 +115,7 @@ func selectMenu() {
 		fmt.Println()
 		if mode == 1 {
 			var fileName string
-			fileList, err := ListFiles(repository, directory)
+			fileList, err := gddl.ListFiles(repository, directory)
 			fmt.Println("Please choose file/folder:")
 			for j, key := range fileList {
 				fmt.Println(fmt.Sprintf("%d: %s", j, key))
@@ -143,7 +144,7 @@ func selectMenu() {
 			if err != nil {
 				panic(err)
 			}
-			err = DownloadAndSave(dir, repository, directory, fileName, false, true)
+			err = gddl.DownloadAndSave(dir, repository, directory, fileName, false, true)
 			if err != nil {
 				panic(err)
 			}
@@ -190,7 +191,7 @@ func main() {
 	if flag.Arg(0) == "show" {
 		if flag.Arg(1) == "" {
 			printStr := ""
-			for _, key := range ListRepository() {
+			for _, key := range gddl.ListRepository() {
 				if printStr == "" {
 					printStr = key
 				} else {
@@ -200,7 +201,7 @@ func main() {
 			fmt.Print(printStr)
 		} else {
 			includes := false
-			for _, key := range ListRepository() {
+			for _, key := range gddl.ListRepository() {
 				if key == flag.Arg(1) {
 					includes = true
 					break
@@ -212,7 +213,7 @@ func main() {
 			}
 			if flag.Arg(2) == "" {
 				printStr := ""
-				directories, err := ListDirectory(flag.Arg(1))
+				directories, err := gddl.ListDirectory(flag.Arg(1))
 				if err != nil {
 					panic(err)
 				}
@@ -227,7 +228,7 @@ func main() {
 			} else {
 				if flag.Arg(3) == "" {
 					includes := false
-					directories, err := ListDirectory(flag.Arg(1))
+					directories, err := gddl.ListDirectory(flag.Arg(1))
 					if err != nil {
 						panic(err)
 					}
@@ -242,7 +243,7 @@ func main() {
 						return
 					}
 					printStr := ""
-					fileList, err := ListFiles(flag.Arg(1), flag.Arg(2))
+					fileList, err := gddl.ListFiles(flag.Arg(1), flag.Arg(2))
 					if err != nil {
 						panic(err)
 					}
@@ -277,7 +278,7 @@ func main() {
 					panic(err)
 				}
 			}
-			err = DownloadAndSave(dir, flag.Arg(1), flag.Arg(2), flag.Arg(3), false, true)
+			err = gddl.DownloadAndSave(dir, flag.Arg(1), flag.Arg(2), flag.Arg(3), false, true)
 			if err != nil {
 				panic(err)
 			}
