@@ -301,3 +301,19 @@ func DownloadAndSave(path string, repository string, directory string, fileName 
 	log.Println("Ended processing")
 	return nil
 }
+
+func GetFileSize(repository string, directory string, fileName string) (int64, error) {
+	service, file, err := getDirectory(repository, directory)
+	if err != nil {
+		return 0, err
+	}
+	result, err := service.Files.List().Corpora("teamDrive").IncludeItemsFromAllDrives(true).SupportsTeamDrives(true).TeamDriveId(Repositories[repository]).Q(fmt.Sprintf("'%s' in parents and (name='%s' or name='%s.tar.xz' or name='%s.tar.gz')", file.Id, fileName, fileName, fileName)).PageSize(1).Do()
+	if err != nil {
+		return 0, errors.New(fmt.Sprintf("Unable to list google drive directory: %v", err))
+	}
+	if len(result.Files) != 1 {
+		return 0, errors.New("error while searching the targeted file")
+	}
+	log.Println("Starting download...")
+	return result.Files[0].Size, nil
+}
