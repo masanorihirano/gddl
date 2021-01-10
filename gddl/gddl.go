@@ -12,11 +12,14 @@ import (
 	"google.golang.org/api/drive/v3"
 	"io/ioutil"
 	"log"
+	"math"
+	"math/rand"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 type ConfigList struct {
@@ -243,10 +246,32 @@ func DownloadAndSave(path string, repository string, directory string, fileName 
 	if len(result.Files) != 1 {
 		return errors.New("error while searching the targeted file")
 	}
-	log.Println("Starting download...")
-	response, err := service.Files.Get(result.Files[0].Id).Download()
-	if err != nil {
-		return errors.New(fmt.Sprintf("failed to download: %v", err))
+	log.Println(fmt.Sprintf("Starting download from %s/%s/%s", repository, directory, fileName))
+	var response *http.Response
+	for i := 0; i < 10; i++ {
+		response, err = service.Files.Get(result.Files[0].Id).Download()
+		if err != nil {
+			if !(response != nil && response.StatusCode/100 == 5) {
+				return errors.New(fmt.Sprintf("failed to download: %v", err))
+			}
+		}
+		if response != nil && response.StatusCode == 200 {
+			break
+		}
+		if response != nil && response.StatusCode/100 == 4 {
+			return errors.New(fmt.Sprintf("failed to download: HTTP responce code %d", response.StatusCode))
+		}
+		if response != nil && response.StatusCode/100 == 5 {
+			if i != 9 {
+				log.Println(fmt.Sprintf("failed to download: HTTP responce code %d retriy after %d sec: %v", response.StatusCode, int(math.Pow(2, float64(i))), err))
+				time.Sleep(time.Duration(rand.Intn(1000)) * time.Microsecond)
+				time.Sleep(time.Duration(math.Pow(2, float64(i))) * time.Second)
+				continue
+			} else {
+				return errors.New(fmt.Sprintf("failed to download: HTTP responce code %d: %v", response.StatusCode, err))
+			}
+		}
+		return errors.New(fmt.Sprintf("failed to download: Unknow error happend. HTTP responce code %d: %v", response.StatusCode, err))
 	}
 	_, err = os.Stat(filepath.Join(path, result.Files[0].Name))
 	if !os.IsNotExist(err) && !saveForce {
@@ -265,9 +290,9 @@ func DownloadAndSave(path string, repository string, directory string, fileName 
 	if err != nil {
 		return errors.New(fmt.Sprintf("Failed to close file: %s", filepath.Join(path, result.Files[0].Name)))
 	}
-	log.Println("Ended download...")
+	log.Println(fmt.Sprintf("Finished download from %s/%s/%s", repository, directory, fileName))
 	if strings.HasSuffix(result.Files[0].Name, ".tar.xz") && unfreeze {
-		log.Println("Starting unfreezing...")
+		log.Println(fmt.Sprintf("Starting unfreezing: %s/%s/%s", repository, directory, fileName))
 		xzArchiver := archiver.NewTarXz()
 		xzArchiver.OverwriteExisting = saveForce
 		err = xzArchiver.Unarchive(filepath.Join(path, result.Files[0].Name), filepath.Join(path))
@@ -280,9 +305,9 @@ func DownloadAndSave(path string, repository string, directory string, fileName 
 				return errors.New(fmt.Sprintf("Failed to delete: %s", filepath.Join(path, result.Files[0].Name)))
 			}
 		}
-		log.Println("Ended unfreezing...")
+		log.Println(fmt.Sprintf("Ended unfreezing: %s/%s/%s", repository, directory, fileName))
 	} else if strings.HasSuffix(result.Files[0].Name, ".tar.gz") && unfreeze {
-		log.Println("Starting unfreezing...")
+		log.Println(fmt.Sprintf("Starting unfreezing: %s/%s/%s", repository, directory, fileName))
 		gzArchiver := archiver.NewTarGz()
 		gzArchiver.SingleThreaded = false
 		gzArchiver.OverwriteExisting = saveForce
@@ -296,9 +321,9 @@ func DownloadAndSave(path string, repository string, directory string, fileName 
 				return errors.New(fmt.Sprintf("Failed to delete: %s", filepath.Join(path, result.Files[0].Name)))
 			}
 		}
-		log.Println("Ended unfreezing...")
+		log.Println(fmt.Sprintf("Ended unfreezing: %s/%s/%s", repository, directory, fileName))
 	}
-	log.Println("Ended processing")
+	log.Println(fmt.Sprintf("Ended processing: %s/%s/%s", repository, directory, fileName))
 	return nil
 }
 
