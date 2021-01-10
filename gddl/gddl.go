@@ -246,7 +246,7 @@ func DownloadAndSave(path string, repository string, directory string, fileName 
 	if len(result.Files) != 1 {
 		return errors.New("error while searching the targeted file")
 	}
-	log.Println("Starting download...")
+	log.Println(fmt.Sprintf("Starting download from %s/%s/%s", repository, directory, fileName))
 	var response *http.Response
 	for i := 0; i < 10; i++ {
 		response, err = service.Files.Get(result.Files[0].Id).Download()
@@ -290,9 +290,9 @@ func DownloadAndSave(path string, repository string, directory string, fileName 
 	if err != nil {
 		return errors.New(fmt.Sprintf("Failed to close file: %s", filepath.Join(path, result.Files[0].Name)))
 	}
-	log.Println("Ended download...")
+	log.Println(fmt.Sprintf("Finished download from %s/%s/%s", repository, directory, fileName))
 	if strings.HasSuffix(result.Files[0].Name, ".tar.xz") && unfreeze {
-		log.Println("Starting unfreezing...")
+		log.Println(fmt.Sprintf("Starting unfreezing: %s/%s/%s", repository, directory, fileName))
 		xzArchiver := archiver.NewTarXz()
 		xzArchiver.OverwriteExisting = saveForce
 		err = xzArchiver.Unarchive(filepath.Join(path, result.Files[0].Name), filepath.Join(path))
@@ -305,9 +305,9 @@ func DownloadAndSave(path string, repository string, directory string, fileName 
 				return errors.New(fmt.Sprintf("Failed to delete: %s", filepath.Join(path, result.Files[0].Name)))
 			}
 		}
-		log.Println("Ended unfreezing...")
+		log.Println(fmt.Sprintf("Ended unfreezing: %s/%s/%s", repository, directory, fileName))
 	} else if strings.HasSuffix(result.Files[0].Name, ".tar.gz") && unfreeze {
-		log.Println("Starting unfreezing...")
+		log.Println(fmt.Sprintf("Starting unfreezing: %s/%s/%s", repository, directory, fileName))
 		gzArchiver := archiver.NewTarGz()
 		gzArchiver.SingleThreaded = false
 		gzArchiver.OverwriteExisting = saveForce
@@ -321,9 +321,9 @@ func DownloadAndSave(path string, repository string, directory string, fileName 
 				return errors.New(fmt.Sprintf("Failed to delete: %s", filepath.Join(path, result.Files[0].Name)))
 			}
 		}
-		log.Println("Ended unfreezing...")
+		log.Println(fmt.Sprintf("Ended unfreezing: %s/%s/%s", repository, directory, fileName))
 	}
-	log.Println("Ended processing")
+	log.Println(fmt.Sprintf("Ended processing: %s/%s/%s", repository, directory, fileName))
 	return nil
 }
 
