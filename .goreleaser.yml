@@ -9,8 +9,8 @@ builds:
     binary: gddl
     ldflags:
       - -s -w
-      - -X main.Version={{.Version}}
-      - -X main.Revision={{.ShortCommit}}
+      - -X main.Version={{.version}}
+      - -X main.Revision={{.shortCommit}}
     goos:
       - windows
       - darwin
