@@ -11,8 +11,24 @@ import (
 	"time"
 )
 
+var (
+	version  string
+	revision string
+)
+
+func printVersion() {
+	fmt.Println("gddl: Google Drive data DL tool for Izumi Lab.")
+	fmt.Printf("version: %s-%s", version, revision)
+}
+
 func showUsage() {
+	fmt.Println("***********************")
+	fmt.Println("Welcome!")
+	printVersion()
+	fmt.Println("***********************")
 	fmt.Printf("Usage (only arguments):\n" +
+		"\tShow this help:\n\t\thelp\n" +
+		"\tShow version:\n\t\tversion\n" +
 		"\tShow all repositories:\n\t\tshow\n" +
 		"\tShow folders in a repository:\n\t\tshow [repository]\n" +
 		"\tShow download candidates in a folder:\n\t\tshow [repository] [folder]\n" +
@@ -34,6 +50,10 @@ func containsString(slice []string, element string) bool {
 }
 
 func selectMenu() {
+	fmt.Println("***********************")
+	fmt.Println("Welcome!")
+	printVersion()
+	fmt.Println("***********************")
 	var mode int
 	fmt.Println("Please choose what you want:")
 	fmt.Println("0. show usage")
@@ -246,7 +266,11 @@ func main() {
 		selectMenu()
 		return
 	}
-	if flag.Arg(0) == "show" {
+	if flag.Arg(0) == "help" {
+		showUsage()
+	}else if flag.Arg(0) == "version" {
+		printVersion()
+	}else if flag.Arg(0) == "show" {
 		if flag.Arg(1) == "" {
 			printStr := ""
 			for _, key := range gddl.ListRepository() {
@@ -337,6 +361,26 @@ func main() {
 				}
 			}
 			err = gddl.DownloadAndSave(dir, flag.Arg(1), flag.Arg(2), flag.Arg(3), false, true)
+			if err != nil {
+				panic(err)
+			}
+		}
+	}else if flag.Arg(0) == "upload" {
+		if len(flag.Args()) > 4 {
+			showUsage()
+			return
+		} else {
+			var dir string
+			var err error
+			if flag.Arg(4) != "" {
+				dir = flag.Arg(4)
+			} else {
+				dir, err = os.Getwd()
+				if err != nil {
+					panic(err)
+				}
+			}
+			err = gddl.Upload(dir, flag.Arg(1), flag.Arg(2), flag.Arg(3), false)
 			if err != nil {
 				panic(err)
 			}
