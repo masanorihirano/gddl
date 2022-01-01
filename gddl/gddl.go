@@ -382,13 +382,51 @@ func Upload(path string, repository string, directory string, fileOrFolderName s
 
 	if !needsCompress {
 		fp, err := os.Open(filepath.Join(path, fileOrFolderName))
+		defer fp.Close()
 		if err != nil {
 			return errors.New(fmt.Sprintf("Failed to make file: %s", filepath.Join(path, fileOrFolderName)))
 		}
 		buffer = bufio.NewReader(fp)
 	} else {
-		//xzArchiver := archiver.NewTarXz()
-		return errors.New("not implemented yet")
+		letters := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+		b := make([]byte, 10)
+		if _, err := rand.Read(b); err != nil {
+			return errors.New("unexpected error")
+		}
+		var randomFileName string
+		for _, v := range b {
+			randomFileName += string(letters[int(v)%len(letters)])
+		}
+		randomFileName += ".tar.xz"
+
+		fpInfo, err = os.Stat(filepath.Join(path, randomFileName))
+		if !os.IsNotExist(err) {
+			return errors.New(fmt.Sprintf("File already exist: %s", filepath.Join(path, fileOrFolderName)))
+		}
+		prevDir, err := os.Getwd()
+		if err != nil{
+			return err
+		}
+		err = os.Chdir(path)
+		if err != nil{
+			return err
+		}
+		xzArchiver := archiver.NewTarXz()
+		err = xzArchiver.Archive([]string{fileOrFolderName}, randomFileName)
+		if err != nil{
+			return err
+		}
+		defer os.Remove(filepath.Join(path, randomFileName))
+		err = os.Chdir(prevDir)
+		if err != nil{
+			return err
+		}
+		fp, err := os.Open(filepath.Join(path, randomFileName))
+		defer fp.Close()
+		if err != nil {
+			return errors.New(fmt.Sprintf("Failed to make file: %s", filepath.Join(path, fileOrFolderName)))
+		}
+		buffer = bufio.NewReader(fp)
 	}
 
 	service, file, err := getDirectory(repository, directory)
