@@ -284,7 +284,9 @@ func DownloadAndSave(path string, repository string, directory string, fileName 
 		return errors.New(fmt.Sprintf("Failed to make file: %s", filepath.Join(path, result.Files[0].Name)))
 	}
 	buffer := bufio.NewWriter(fp)
-	_, err = buffer.ReadFrom(response.Body)
+	bar := pb.Full.Start64(response.ContentLength)
+	barReader := bar.NewProxyReader(response.Body)
+	_, err = buffer.ReadFrom(barReader)
 	if err != nil {
 		return errors.New(fmt.Sprintf("Failed to get data from google drive: %s", filepath.Join(path, result.Files[0].Name)))
 	}
