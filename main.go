@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/masanorihirano/gddl/gddl"
+	"io/ioutil"
 	"os"
 	"strconv"
 	"time"
@@ -173,8 +174,65 @@ func selectMenu() {
 				break
 			}
 		} else if mode == 2 {
-			fmt.Println("Currently this mode is disabled.")
-			break
+			var fileName string
+			currentDir, _ := os.Getwd()
+			fileList, err := ioutil.ReadDir(currentDir)
+			if err != nil {
+				panic(err)
+			}
+			fmt.Println("Please choose file/folder to be uploaded:")
+			for j, key := range fileList {
+				fmt.Println(fmt.Sprintf("%d: %s", j, key.Name()))
+			}
+			fmt.Print(fmt.Sprintf("please type your choice (0-%d): ", len(fileList)-1))
+			for {
+				scanner := bufio.NewScanner(os.Stdin)
+				scanner.Scan()
+				i, err := strconv.Atoi(scanner.Text())
+				if err == nil {
+					if i >= 0 && i < len(fileList) {
+						for j, key := range fileList {
+							if i == j {
+								fileName = key.Name()
+								break
+							}
+						}
+						break
+					}
+				}
+				fmt.Print(fmt.Sprintf("please type your choice correctly from 0-%d: ", len(fileList)-1))
+			}
+			fmt.Println(fmt.Sprintf("your choice: %s", fileName))
+			fmt.Println()
+
+			err = gddl.Upload(currentDir, repository, directory, fileName, false)
+			if err != nil {
+				panic(err)
+			}
+			time.Sleep(time.Second * 1)
+			fmt.Println("Upload was finished.")
+			fmt.Print("Do you want to upload the next file? [y/n]: ")
+			var goNext bool
+			for {
+				scanner := bufio.NewScanner(os.Stdin)
+				scanner.Scan()
+				yesResponses := []string{"y", "Y", "yes", "Yes", "YES"}
+				noResponses := []string{"n", "N", "no", "No", "NO"}
+				response := scanner.Text()
+				if containsString(yesResponses, response) {
+					goNext = true
+					break
+				} else if containsString(noResponses, response) {
+					goNext = false
+					break
+				}
+				fmt.Print("please type 'y' or 'n': ")
+			}
+			if goNext {
+				continue
+			} else {
+				break
+			}
 		}
 	}
 	fmt.Println("This is the end of this program. To close this, please type anything")

@@ -10,6 +10,7 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/drive/v3"
+	"io"
 	"io/ioutil"
 	"log"
 	"math"
@@ -344,4 +345,110 @@ func GetFileSize(repository string, directory string, fileName string) (int64, e
 		return 0, errors.New(fmt.Sprintf("Unable to get information from google drive: %v", err))
 	}
 	return info.Size, nil
+}
+
+func CheckExists(repository string, directory string, fileName string) (*string, *drive.File, error) {
+	service, file, err := getDirectory(repository, directory)
+	if err != nil {
+		return nil, nil, err
+	}
+	result, err := service.Files.List().Corpora("teamDrive").IncludeItemsFromAllDrives(true).SupportsTeamDrives(true).TeamDriveId(Repositories[repository]).Q(fmt.Sprintf("'%s' in parents and (name='%s')", file.Id, fileName)).PageSize(1).Do()
+	if err != nil {
+		return nil, nil, errors.New(fmt.Sprintf("Unable to list google drive directory: %v", err))
+	}
+	if len(result.Files) != 1 {
+		return nil, nil, nil
+	}
+	info, err := service.Files.Get(result.Files[0].Id).SupportsTeamDrives(true).Fields("size").Do()
+	if err != nil {
+		return nil, nil, nil
+	}
+	return &result.Files[0].Id, info, nil
+}
+
+func Upload(path string, repository string, directory string, fileOrFolderName string, fileForceCompress bool) error {
+	fpInfo, err := os.Stat(filepath.Join(path, fileOrFolderName))
+	if os.IsNotExist(err) {
+		return errors.New(fmt.Sprintf("File doesn't exist: %s", filepath.Join(path, fileOrFolderName)))
+	}
+	isDir := fpInfo.IsDir()
+	googleDriveFileName := fileOrFolderName
+	needsCompress := fileForceCompress
+	if isDir {
+		googleDriveFileName += ".tar.xz"
+		needsCompress = true
+	}
+	var buffer io.Reader
+
+	if !needsCompress {
+		fp, err := os.Open(filepath.Join(path, fileOrFolderName))
+		defer fp.Close()
+		if err != nil {
+			return errors.New(fmt.Sprintf("Failed to make file: %s", filepath.Join(path, fileOrFolderName)))
+		}
+		buffer = bufio.NewReader(fp)
+	} else {
+		letters := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+		b := make([]byte, 10)
+		if _, err := rand.Read(b); err != nil {
+			return errors.New("unexpected error")
+		}
+		var randomFileName string
+		for _, v := range b {
+			randomFileName += string(letters[int(v)%len(letters)])
+		}
+		randomFileName += ".tar.xz"
+
+		fpInfo, err = os.Stat(filepath.Join(path, randomFileName))
+		if !os.IsNotExist(err) {
+			return errors.New(fmt.Sprintf("File already exist: %s", filepath.Join(path, fileOrFolderName)))
+		}
+		prevDir, err := os.Getwd()
+		if err != nil{
+			return err
+		}
+		err = os.Chdir(path)
+		if err != nil{
+			return err
+		}
+		xzArchiver := archiver.NewTarXz()
+		err = xzArchiver.Archive([]string{fileOrFolderName}, randomFileName)
+		if err != nil{
+			return err
+		}
+		defer os.Remove(filepath.Join(path, randomFileName))
+		err = os.Chdir(prevDir)
+		if err != nil{
+			return err
+		}
+		fp, err := os.Open(filepath.Join(path, randomFileName))
+		defer fp.Close()
+		if err != nil {
+			return errors.New(fmt.Sprintf("Failed to make file: %s", filepath.Join(path, fileOrFolderName)))
+		}
+		buffer = bufio.NewReader(fp)
+	}
+
+	service, file, err := getDirectory(repository, directory)
+	if err != nil {
+		return err
+	}
+	id, fileOnGd, err := CheckExists(repository, directory, googleDriveFileName)
+	if err != nil {
+		return err
+	}
+	if fileOnGd != nil {
+		_, err = service.Files.Update(*id, nil).SupportsTeamDrives(true).Media(buffer).Do()
+		if err != nil {
+			return err
+		}
+	} else {
+		googleDriveFp := &drive.File{Name: googleDriveFileName, Parents: []string{file.Id}}
+		_, err = service.Files.Create(googleDriveFp).SupportsTeamDrives(true).Media(buffer).Do()
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
