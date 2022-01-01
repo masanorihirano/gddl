@@ -287,6 +287,7 @@ func DownloadAndSave(path string, repository string, directory string, fileName 
 	bar := pb.Full.Start64(response.ContentLength)
 	barReader := bar.NewProxyReader(response.Body)
 	_, err = buffer.ReadFrom(barReader)
+	bar.Finish()
 	if err != nil {
 		return errors.New(fmt.Sprintf("Failed to get data from google drive: %s", filepath.Join(path, result.Files[0].Name)))
 	}
