@@ -18,7 +18,7 @@ var (
 
 func printVersion() {
 	fmt.Println("gddl: Google Drive data DL tool for Izumi Lab.")
-	fmt.Printf("version: %s-%s", version, revision)
+	fmt.Printf("version: %s-%s\n", version, revision)
 }
 
 func showUsage() {
