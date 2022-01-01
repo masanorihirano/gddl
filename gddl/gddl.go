@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/cheggaaa/pb/v3"
 	"github.com/mholt/archiver/v3"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -283,7 +284,10 @@ func DownloadAndSave(path string, repository string, directory string, fileName 
 		return errors.New(fmt.Sprintf("Failed to make file: %s", filepath.Join(path, result.Files[0].Name)))
 	}
 	buffer := bufio.NewWriter(fp)
-	_, err = buffer.ReadFrom(response.Body)
+	bar := pb.Full.Start64(response.ContentLength)
+	barReader := bar.NewProxyReader(response.Body)
+	_, err = buffer.ReadFrom(barReader)
+	bar.Finish()
 	if err != nil {
 		return errors.New(fmt.Sprintf("Failed to get data from google drive: %s", filepath.Join(path, result.Files[0].Name)))
 	}
@@ -379,6 +383,7 @@ func Upload(path string, repository string, directory string, fileOrFolderName s
 		needsCompress = true
 	}
 	var buffer io.Reader
+	var bufferSize int64
 
 	if !needsCompress {
 		fp, err := os.Open(filepath.Join(path, fileOrFolderName))
@@ -387,6 +392,11 @@ func Upload(path string, repository string, directory string, fileOrFolderName s
 			return errors.New(fmt.Sprintf("Failed to make file: %s", filepath.Join(path, fileOrFolderName)))
 		}
 		buffer = bufio.NewReader(fp)
+		fpInfo, err := fp.Stat()
+		if err != nil{
+			return nil
+		}
+		bufferSize = fpInfo.Size()
 	} else {
 		letters := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 		b := make([]byte, 10)
@@ -427,6 +437,11 @@ func Upload(path string, repository string, directory string, fileOrFolderName s
 			return errors.New(fmt.Sprintf("Failed to make file: %s", filepath.Join(path, fileOrFolderName)))
 		}
 		buffer = bufio.NewReader(fp)
+		fpInfo, err := fp.Stat()
+		if err != nil{
+			return nil
+		}
+		bufferSize = fpInfo.Size()
 	}
 
 	service, file, err := getDirectory(repository, directory)
@@ -437,6 +452,10 @@ func Upload(path string, repository string, directory string, fileOrFolderName s
 	if err != nil {
 		return err
 	}
+
+	bar := pb.Full.Start64(bufferSize)
+	buffer = bar.NewProxyReader(buffer)
+
 	if fileOnGd != nil {
 		_, err = service.Files.Update(*id, nil).SupportsTeamDrives(true).Media(buffer).Do()
 		if err != nil {
@@ -449,6 +468,7 @@ func Upload(path string, repository string, directory string, fileOrFolderName s
 			return err
 		}
 	}
+	bar.Finish()
 
 	return nil
 }

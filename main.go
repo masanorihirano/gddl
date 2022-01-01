@@ -12,13 +12,17 @@ import (
 )
 
 var (
-	version  string
+	version = "v1.0.0"
 	revision string
 )
 
 func printVersion() {
 	fmt.Println("gddl: Google Drive data DL tool for Izumi Lab.")
-	fmt.Printf("version: %s-%s\n", version, revision)
+	if revision != "" {
+		fmt.Printf("version: %s-%s\n", version, revision)
+	}else{
+		fmt.Printf("version: %s\n", version)
+	}
 }
 
 func showUsage() {
