@@ -427,7 +427,7 @@ func Upload(path string, repository string, directory string, fileOrFolderName s
 		if err == nil{
 			hasPixz = true
 		}else {
-			println(err)
+			println(err.Error())
 		}
 		if hasPixz{
 			err = exec.Command("tar", "-cf", randomFileName, "--use-compress-program=pixz", fileOrFolderName).Run()
