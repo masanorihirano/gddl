@@ -399,6 +399,7 @@ func Upload(path string, repository string, directory string, fileOrFolderName s
 		}
 		bufferSize = fpInfo.Size()
 	} else {
+		rand.Seed(time.Now().UnixNano())
 		letters := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 		b := make([]byte, 10)
 		if _, err := rand.Read(b); err != nil {
