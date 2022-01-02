@@ -18,6 +18,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -421,10 +422,25 @@ func Upload(path string, repository string, directory string, fileOrFolderName s
 		if err != nil{
 			return err
 		}
-		xzArchiver := archiver.NewTarXz()
-		err = xzArchiver.Archive([]string{fileOrFolderName}, randomFileName)
-		if err != nil{
-			return err
+		hasPixz := false
+		err = exec.Command("pixz").Run()
+		if err == nil{
+			hasPixz = true
+		}
+		if hasPixz{
+			err = exec.Command("tar", "-cf", randomFileName, "--use-compress-program=pixz", fileOrFolderName).Run()
+			if err != nil {
+				os.Remove(filepath.Join(path, randomFileName))
+				return err
+			}
+		}else {
+			log.Println("pixz not installed. For bigger data foler, we highly recommend installing pixz.")
+			xzArchiver := archiver.NewTarXz()
+			err = xzArchiver.Archive([]string{fileOrFolderName}, randomFileName)
+			if err != nil {
+				os.Remove(filepath.Join(path, randomFileName))
+				return err
+			}
 		}
 		defer os.Remove(filepath.Join(path, randomFileName))
 		err = os.Chdir(prevDir)
