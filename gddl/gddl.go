@@ -312,12 +312,6 @@ func DownloadAndSave(path string, repository string, directory string, fileName 
 		if err != nil {
 			return errors.New(fmt.Sprintf("Failed to unarchive: %s", filepath.Join(path, result.Files[0].Name)))
 		}
-		if unfreeze {
-			err = os.Remove(filepath.Join(path, result.Files[0].Name))
-			if err != nil {
-				return errors.New(fmt.Sprintf("Failed to delete: %s", filepath.Join(path, result.Files[0].Name)))
-			}
-		}
 		log.Println(fmt.Sprintf("Ended unfreezing: %s/%s/%s", repository, directory, fileName))
 	} else if strings.HasSuffix(result.Files[0].Name, ".tar.gz") && unfreeze {
 		log.Println(fmt.Sprintf("Starting unfreezing: %s/%s/%s", repository, directory, fileName))
@@ -328,13 +322,13 @@ func DownloadAndSave(path string, repository string, directory string, fileName 
 		if err != nil {
 			return errors.New(fmt.Sprintf("Failed to unarchive: %s", filepath.Join(path, result.Files[0].Name)))
 		}
-		if unfreeze {
-			err := os.Remove(filepath.Join(path, result.Files[0].Name))
-			if err != nil {
-				return errors.New(fmt.Sprintf("Failed to delete: %s", filepath.Join(path, result.Files[0].Name)))
-			}
-		}
 		log.Println(fmt.Sprintf("Ended unfreezing: %s/%s/%s", repository, directory, fileName))
+	}
+	if unfreeze {
+		err = os.Remove(filepath.Join(path, result.Files[0].Name))
+		if err != nil {
+			return errors.New(fmt.Sprintf("Failed to delete: %s", filepath.Join(path, result.Files[0].Name)))
+		}
 	}
 	log.Println(fmt.Sprintf("Ended processing: %s/%s/%s", repository, directory, fileName))
 	return nil
