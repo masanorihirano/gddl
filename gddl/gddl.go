@@ -320,9 +320,9 @@ func DownloadAndSave(path string, repository string, directory string, fileName 
 			hasPixz = true
 		}
 		if hasPixz{
-			err = exec.Command("pixz", "-x",
+			err = exec.Command("sh", "-c", fmt.Sprintf("pixz -x %s < %s | tar x",
 				filepath.Join(path, Rev(strings.Replace(Rev(result.Files[0].Name), Rev(".tar.xz"), "", 1))),
-				"<",filepath.Join(path, result.Files[0].Name), "|", "tar", "x").Run()
+				filepath.Join(path, result.Files[0].Name))).Run()
 			if err != nil {
 				return err
 			}
