@@ -240,6 +240,14 @@ func ListFiles(repository string, directory string) ([]string, error) {
 	return results, nil
 }
 
+func Rev(s string) string {
+	runes := []rune(s)
+	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
+		runes[i], runes[j] = runes[j], runes[i]
+	}
+	return string(runes)
+}
+
 func DownloadAndSave(path string, repository string, directory string, fileName string, saveForce bool, unfreeze bool) error {
 	service, file, err := getDirectory(repository, directory)
 	if err != nil {
@@ -253,6 +261,10 @@ func DownloadAndSave(path string, repository string, directory string, fileName 
 		return errors.New("error while searching the targeted file")
 	}
 	log.Println(fmt.Sprintf("Starting download from %s/%s/%s", repository, directory, fileName))
+	fileSize, err := GetFileSize(repository, directory, fileName)
+	if err != nil{
+		return err
+	}
 	var response *http.Response
 	for i := 0; i < 10; i++ {
 		response, err = service.Files.Get(result.Files[0].Id).Download()
@@ -288,7 +300,7 @@ func DownloadAndSave(path string, repository string, directory string, fileName 
 		return errors.New(fmt.Sprintf("Failed to make file: %s", filepath.Join(path, result.Files[0].Name)))
 	}
 	buffer := bufio.NewWriter(fp)
-	bar := pb.Full.Start64(response.ContentLength)
+	bar := pb.Full.Start64(fileSize)
 	barReader := bar.NewProxyReader(response.Body)
 	_, err = buffer.ReadFrom(barReader)
 	bar.Finish()
@@ -302,16 +314,37 @@ func DownloadAndSave(path string, repository string, directory string, fileName 
 	log.Println(fmt.Sprintf("Finished download from %s/%s/%s", repository, directory, fileName))
 	if strings.HasSuffix(result.Files[0].Name, ".tar.xz") && unfreeze {
 		log.Println(fmt.Sprintf("Starting unfreezing: %s/%s/%s", repository, directory, fileName))
-		xzArchiver := archiver.NewTarXz()
-		xzArchiver.OverwriteExisting = saveForce
-		err = xzArchiver.Unarchive(filepath.Join(path, result.Files[0].Name), filepath.Join(path))
-		if err != nil {
-			return errors.New(fmt.Sprintf("Failed to unarchive: %s", filepath.Join(path, result.Files[0].Name)))
+		hasPixz := false
+		pixzPath, _ := exec.LookPath("pixz")
+		if pixzPath != ""{
+			hasPixz = true
 		}
-		if unfreeze {
-			err = os.Remove(filepath.Join(path, result.Files[0].Name))
+		if hasPixz{
+			prevDir, err := os.Getwd()
+			if err != nil{
+				return err
+			}
+			err = os.Chdir(path)
+			if err != nil{
+				return err
+			}
+			err = exec.Command("sh", "-c", fmt.Sprintf("pixz -x %s < %s | tar x",
+				Rev(strings.Replace(Rev(result.Files[0].Name), Rev(".tar.xz"), "", 1)),
+				filepath.Join(path, result.Files[0].Name))).Run()
 			if err != nil {
-				return errors.New(fmt.Sprintf("Failed to delete: %s", filepath.Join(path, result.Files[0].Name)))
+				return err
+			}
+			err = os.Chdir(prevDir)
+			if err != nil{
+				return err
+			}
+		}else {
+			log.Println("pixz not installed. For bigger data foler, we highly recommend installing pixz.")
+			xzArchiver := archiver.NewTarXz()
+			xzArchiver.OverwriteExisting = saveForce
+			err = xzArchiver.Unarchive(filepath.Join(path, result.Files[0].Name), filepath.Join(path))
+			if err != nil {
+				return errors.New(fmt.Sprintf("Failed to unarchive: %s", filepath.Join(path, result.Files[0].Name)))
 			}
 		}
 		log.Println(fmt.Sprintf("Ended unfreezing: %s/%s/%s", repository, directory, fileName))
@@ -324,13 +357,13 @@ func DownloadAndSave(path string, repository string, directory string, fileName 
 		if err != nil {
 			return errors.New(fmt.Sprintf("Failed to unarchive: %s", filepath.Join(path, result.Files[0].Name)))
 		}
-		if unfreeze {
-			err := os.Remove(filepath.Join(path, result.Files[0].Name))
-			if err != nil {
-				return errors.New(fmt.Sprintf("Failed to delete: %s", filepath.Join(path, result.Files[0].Name)))
-			}
-		}
 		log.Println(fmt.Sprintf("Ended unfreezing: %s/%s/%s", repository, directory, fileName))
+	}
+	if unfreeze {
+		err = os.Remove(filepath.Join(path, result.Files[0].Name))
+		if err != nil {
+			return errors.New(fmt.Sprintf("Failed to delete: %s", filepath.Join(path, result.Files[0].Name)))
+		}
 	}
 	log.Println(fmt.Sprintf("Ended processing: %s/%s/%s", repository, directory, fileName))
 	return nil

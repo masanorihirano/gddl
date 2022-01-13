@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/masanorihirano/gddl/gddl"
 	"io/ioutil"
+	"log"
 	"os"
 	"strconv"
 	"time"
@@ -112,7 +113,7 @@ func selectMenu() {
 		var directory string
 		directories, err := gddl.ListDirectory(repository)
 		if err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 		fmt.Println("Please choose directory:")
 		for j, key := range directories {
@@ -167,11 +168,11 @@ func selectMenu() {
 			fmt.Println()
 			dir, err := os.Getwd()
 			if err != nil {
-				panic(err)
+				log.Fatal(err)
 			}
 			err = gddl.DownloadAndSave(dir, repository, directory, fileName, false, true)
 			if err != nil {
-				panic(err)
+				log.Fatal(err)
 			}
 			time.Sleep(time.Second * 1)
 			fmt.Println("Download was finished.")
@@ -202,7 +203,7 @@ func selectMenu() {
 			currentDir, _ := os.Getwd()
 			fileList, err := ioutil.ReadDir(currentDir)
 			if err != nil {
-				panic(err)
+				log.Fatal(err)
 			}
 			fmt.Println("Please choose file/folder to be uploaded:")
 			for j, key := range fileList {
@@ -231,7 +232,7 @@ func selectMenu() {
 
 			err = gddl.Upload(currentDir, repository, directory, fileName, false)
 			if err != nil {
-				panic(err)
+				log.Fatal(err)
 			}
 			time.Sleep(time.Second * 1)
 			fmt.Println("Upload was finished.")
@@ -301,7 +302,7 @@ func main() {
 				printStr := ""
 				directories, err := gddl.ListDirectory(flag.Arg(1))
 				if err != nil {
-					panic(err)
+					log.Fatal(err)
 				}
 				for _, key := range directories {
 					if printStr == "" {
@@ -316,7 +317,7 @@ func main() {
 					includes := false
 					directories, err := gddl.ListDirectory(flag.Arg(1))
 					if err != nil {
-						panic(err)
+						log.Fatal(err)
 					}
 					for _, key := range directories {
 						if key == flag.Arg(2) {
@@ -331,7 +332,7 @@ func main() {
 					printStr := ""
 					fileList, err := gddl.ListFiles(flag.Arg(1), flag.Arg(2))
 					if err != nil {
-						panic(err)
+						log.Fatal(err)
 					}
 					for _, key := range fileList {
 						if printStr == "" {
@@ -361,12 +362,12 @@ func main() {
 			} else {
 				dir, err = os.Getwd()
 				if err != nil {
-					panic(err)
+					log.Fatal(err)
 				}
 			}
 			err = gddl.DownloadAndSave(dir, flag.Arg(1), flag.Arg(2), flag.Arg(3), false, true)
 			if err != nil {
-				panic(err)
+				log.Fatal(err)
 			}
 		}
 	}else if flag.Arg(0) == "upload" {
@@ -381,12 +382,12 @@ func main() {
 			} else {
 				dir, err = os.Getwd()
 				if err != nil {
-					panic(err)
+					log.Fatal(err)
 				}
 			}
 			err = gddl.Upload(dir, flag.Arg(1), flag.Arg(2), flag.Arg(3), false)
 			if err != nil {
-				panic(err)
+				log.Fatal(err)
 			}
 		}
 	}
