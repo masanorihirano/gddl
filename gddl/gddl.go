@@ -240,6 +240,14 @@ func ListFiles(repository string, directory string) ([]string, error) {
 	return results, nil
 }
 
+func Rev(s string) string {
+	runes := []rune(s)
+	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
+		runes[i], runes[j] = runes[j], runes[i]
+	}
+	return string(runes)
+}
+
 func DownloadAndSave(path string, repository string, directory string, fileName string, saveForce bool, unfreeze bool) error {
 	service, file, err := getDirectory(repository, directory)
 	if err != nil {
@@ -312,7 +320,9 @@ func DownloadAndSave(path string, repository string, directory string, fileName 
 			hasPixz = true
 		}
 		if hasPixz{
-			err = exec.Command("pixz", "-x", filepath.Join(path), "<",filepath.Join(path, result.Files[0].Name), "|", "tar", "x").Run()
+			err = exec.Command("pixz", "-x",
+				filepath.Join(path, Rev(strings.Replace(Rev(result.Files[0].Name), Rev(".tar.xz"), "", 1))),
+				"<",filepath.Join(path, result.Files[0].Name), "|", "tar", "x").Run()
 			if err != nil {
 				return err
 			}
