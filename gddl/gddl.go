@@ -253,6 +253,10 @@ func DownloadAndSave(path string, repository string, directory string, fileName 
 		return errors.New("error while searching the targeted file")
 	}
 	log.Println(fmt.Sprintf("Starting download from %s/%s/%s", repository, directory, fileName))
+	fileSize, err := GetFileSize(repository, directory, fileName)
+	if err != nil{
+		return err
+	}
 	var response *http.Response
 	for i := 0; i < 10; i++ {
 		response, err = service.Files.Get(result.Files[0].Id).Download()
@@ -288,7 +292,7 @@ func DownloadAndSave(path string, repository string, directory string, fileName 
 		return errors.New(fmt.Sprintf("Failed to make file: %s", filepath.Join(path, result.Files[0].Name)))
 	}
 	buffer := bufio.NewWriter(fp)
-	bar := pb.Full.Start64(response.ContentLength)
+	bar := pb.Full.Start64(fileSize)
 	barReader := bar.NewProxyReader(response.Body)
 	_, err = buffer.ReadFrom(barReader)
 	bar.Finish()
