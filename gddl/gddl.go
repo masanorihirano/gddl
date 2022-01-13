@@ -306,11 +306,24 @@ func DownloadAndSave(path string, repository string, directory string, fileName 
 	log.Println(fmt.Sprintf("Finished download from %s/%s/%s", repository, directory, fileName))
 	if strings.HasSuffix(result.Files[0].Name, ".tar.xz") && unfreeze {
 		log.Println(fmt.Sprintf("Starting unfreezing: %s/%s/%s", repository, directory, fileName))
-		xzArchiver := archiver.NewTarXz()
-		xzArchiver.OverwriteExisting = saveForce
-		err = xzArchiver.Unarchive(filepath.Join(path, result.Files[0].Name), filepath.Join(path))
-		if err != nil {
-			return errors.New(fmt.Sprintf("Failed to unarchive: %s", filepath.Join(path, result.Files[0].Name)))
+		hasPixz := false
+		pixzPath, _ := exec.LookPath("pixz")
+		if pixzPath != ""{
+			hasPixz = true
+		}
+		if hasPixz{
+			err = exec.Command("pixz", "-x", filepath.Join(path), "<",filepath.Join(path, result.Files[0].Name), "|", "tar", "x").Run()
+			if err != nil {
+				return err
+			}
+		}else {
+			log.Println("pixz not installed. For bigger data foler, we highly recommend installing pixz.")
+			xzArchiver := archiver.NewTarXz()
+			xzArchiver.OverwriteExisting = saveForce
+			err = xzArchiver.Unarchive(filepath.Join(path, result.Files[0].Name), filepath.Join(path))
+			if err != nil {
+				return errors.New(fmt.Sprintf("Failed to unarchive: %s", filepath.Join(path, result.Files[0].Name)))
+			}
 		}
 		log.Println(fmt.Sprintf("Ended unfreezing: %s/%s/%s", repository, directory, fileName))
 	} else if strings.HasSuffix(result.Files[0].Name, ".tar.gz") && unfreeze {
