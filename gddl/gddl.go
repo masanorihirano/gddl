@@ -66,7 +66,7 @@ func getClient(config *oauth2.Config) (*http.Client, error) {
 		return nil, err
 	}
 	dir := filepath.Join(homeDir, ".config", "gddl")
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
 	tokFile := filepath.Join(dir, "gddl_token.json")
