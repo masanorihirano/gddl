@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	version = "v1.0.4"
+	version  = "v1.0.4"
 	revision string
 )
 
@@ -21,7 +21,7 @@ func printVersion() {
 	fmt.Println("gddl: Google Drive data DL tool for Izumi Lab.")
 	if revision != "" {
 		fmt.Printf("version: %s-%s\n", version, revision)
-	}else{
+	} else {
 		fmt.Printf("version: %s\n", version)
 	}
 }
@@ -273,9 +273,9 @@ func main() {
 	}
 	if flag.Arg(0) == "help" {
 		showUsage()
-	}else if flag.Arg(0) == "version" {
+	} else if flag.Arg(0) == "version" {
 		printVersion()
-	}else if flag.Arg(0) == "show" {
+	} else if flag.Arg(0) == "show" {
 		if flag.Arg(1) == "" {
 			printStr := ""
 			for _, key := range gddl.ListRepository() {
@@ -370,7 +370,7 @@ func main() {
 				log.Fatal(err)
 			}
 		}
-	}else if flag.Arg(0) == "upload" {
+	} else if flag.Arg(0) == "upload" {
 		if len(flag.Args()) > 4 {
 			showUsage()
 			return
