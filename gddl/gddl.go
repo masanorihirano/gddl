@@ -16,6 +16,7 @@ import (
 	"log"
 	"math"
 	"math/rand"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -90,14 +91,23 @@ func getClient(config *oauth2.Config) (*http.Client, error) {
 
 // Request a token from the web, then returns the retrieved token.
 func getTokenFromWeb(config *oauth2.Config) (*oauth2.Token, error) {
-	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
-	fmt.Printf("Go to the following link in your browser then type the "+
-		"authorization code: \n%v\n", authURL)
-
-	var authCode string
-	if _, err := fmt.Scan(&authCode); err != nil {
-		return nil, errors.New(fmt.Sprintf("Unable to read authorization code %v", err))
+	listener, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		return nil, err
 	}
+	address := listener.Addr().String()
+	config.RedirectURL = fmt.Sprintf("http://%s", address)
+	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
+	fmt.Printf("Go to the following link in your browser: \n%v\n", authURL)
+	codeCh := make(chan string)
+	go http.Serve(listener, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		code := r.FormValue("code")
+		codeCh <- code // send code to OAuth flow
+		listener.Close()
+		w.Header().Set("Content-Type", "text/plain")
+		fmt.Fprint(w, "Received code. You can now safely close this browser window.")
+	}))
+	authCode := <-codeCh
 
 	tok, err := config.Exchange(context.TODO(), authCode)
 	if err != nil {

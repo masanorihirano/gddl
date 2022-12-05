@@ -5,7 +5,7 @@ go 1.15
 require (
 	cloud.google.com/go v0.86.0 // indirect
 	github.com/andybalholm/brotli v1.0.3 // indirect
-	github.com/cheggaaa/pb/v3 v3.0.8 // indirect
+	github.com/cheggaaa/pb/v3 v3.0.8
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/klauspost/compress v1.13.1 // indirect
