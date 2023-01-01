@@ -11,6 +11,8 @@ builds:
       - -s -w
       - -X main.version={{.Version}}
       - -X main.revision={{.ShortCommit}}
+      - -X main.clientId={{.CLIENT_ID}}
+      - -X main.clinetSecret={{.CLIENT_SECRET}}
     goos:
       - windows
       - darwin

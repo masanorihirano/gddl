@@ -13,8 +13,10 @@ import (
 )
 
 var (
-	version  = "v1.0.4"
-	revision string
+	version      = "v1.0.4"
+	revision     string
+	clientId     string
+	clientSecret string
 )
 
 func printVersion() {
@@ -111,7 +113,7 @@ func selectMenu() {
 		fmt.Println(fmt.Sprintf("your choice: %s", repository))
 		fmt.Println()
 		var directory string
-		directories, err := gddl.ListDirectory(repository)
+		directories, err := gddl.ListDirectory(clientId, clientSecret, repository)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -141,7 +143,7 @@ func selectMenu() {
 		fmt.Println()
 		if mode == 1 {
 			var fileName string
-			fileList, err := gddl.ListFiles(repository, directory)
+			fileList, err := gddl.ListFiles(clientId, clientSecret, repository, directory)
 			fmt.Println("Please choose file/folder:")
 			for j, key := range fileList {
 				fmt.Println(fmt.Sprintf("%d: %s", j, key))
@@ -170,7 +172,7 @@ func selectMenu() {
 			if err != nil {
 				log.Fatal(err)
 			}
-			err = gddl.DownloadAndSave(dir, repository, directory, fileName, false, true)
+			err = gddl.DownloadAndSave(clientId, clientSecret, dir, repository, directory, fileName, false, true)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -230,7 +232,7 @@ func selectMenu() {
 			fmt.Println(fmt.Sprintf("your choice: %s", fileName))
 			fmt.Println()
 
-			err = gddl.Upload(currentDir, repository, directory, fileName, false)
+			err = gddl.Upload(clientId, clientSecret, currentDir, repository, directory, fileName, false)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -300,7 +302,7 @@ func main() {
 			}
 			if flag.Arg(2) == "" {
 				printStr := ""
-				directories, err := gddl.ListDirectory(flag.Arg(1))
+				directories, err := gddl.ListDirectory(clientId, clientSecret, flag.Arg(1))
 				if err != nil {
 					log.Fatal(err)
 				}
@@ -315,7 +317,7 @@ func main() {
 			} else {
 				if flag.Arg(3) == "" {
 					includes := false
-					directories, err := gddl.ListDirectory(flag.Arg(1))
+					directories, err := gddl.ListDirectory(clientId, clientSecret, flag.Arg(1))
 					if err != nil {
 						log.Fatal(err)
 					}
@@ -330,7 +332,7 @@ func main() {
 						return
 					}
 					printStr := ""
-					fileList, err := gddl.ListFiles(flag.Arg(1), flag.Arg(2))
+					fileList, err := gddl.ListFiles(clientId, clientSecret, flag.Arg(1), flag.Arg(2))
 					if err != nil {
 						log.Fatal(err)
 					}
@@ -365,7 +367,7 @@ func main() {
 					log.Fatal(err)
 				}
 			}
-			err = gddl.DownloadAndSave(dir, flag.Arg(1), flag.Arg(2), flag.Arg(3), false, true)
+			err = gddl.DownloadAndSave(clientId, clientSecret, dir, flag.Arg(1), flag.Arg(2), flag.Arg(3), false, true)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -385,7 +387,7 @@ func main() {
 					log.Fatal(err)
 				}
 			}
-			err = gddl.Upload(dir, flag.Arg(1), flag.Arg(2), flag.Arg(3), false)
+			err = gddl.Upload(clientId, clientSecret, dir, flag.Arg(1), flag.Arg(2), flag.Arg(3), false)
 			if err != nil {
 				log.Fatal(err)
 			}

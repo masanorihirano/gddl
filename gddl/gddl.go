@@ -9,15 +9,14 @@ import (
 	"github.com/cheggaaa/pb/v3"
 	"github.com/mholt/archiver/v3"
 	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/google"
 	"google.golang.org/api/drive/v3"
 	"io"
 	"io/ioutil"
 	"log"
 	"math"
 	"math/rand"
-	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -27,16 +26,30 @@ import (
 )
 
 type ConfigList struct {
-	CredentialUrl     string
 	RepositoryInfoUrl string
 }
 
 var Config ConfigList
 var Repositories map[string]string
 
+type DeviceAuthResp struct {
+	DeviceCode      string `json:"device_code"`
+	UserCode        string `json:"user_code"`
+	VerificationUrl string `json:"verification_url"`
+	ExpiresIn       int    `json:"expires_in"`
+	Interval        int    `json:"interval"`
+}
+
+type PoolingResp struct {
+	AccessToken  string `json:"access_token"`
+	ExpiresIn    int    `json:"expires_in"`
+	Scope        string `json:"scope"`
+	TokenType    string `json:"token_type"`
+	RefreshToken string `json:"refresh_token"`
+}
+
 func init() {
 	Config = ConfigList{
-		CredentialUrl:     "https://gist.githubusercontent.com/masanorihirano/d9464a1d8684d794d7e0a0136347f9bb/raw/gddl-credential",
 		RepositoryInfoUrl: "https://gist.githubusercontent.com/masanorihirano/d9464a1d8684d794d7e0a0136347f9bb/raw/gddl-settings",
 	}
 
@@ -91,29 +104,57 @@ func getClient(config *oauth2.Config) (*http.Client, error) {
 
 // Request a token from the web, then returns the retrieved token.
 func getTokenFromWeb(config *oauth2.Config) (*oauth2.Token, error) {
-	listener, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		return nil, err
-	}
-	address := listener.Addr().String()
-	config.RedirectURL = fmt.Sprintf("http://%s", address)
-	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
-	fmt.Printf("Go to the following link in your browser: \n%v\n", authURL)
-	codeCh := make(chan string)
-	go http.Serve(listener, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		code := r.FormValue("code")
-		codeCh <- code // send code to OAuth flow
-		listener.Close()
-		w.Header().Set("Content-Type", "text/plain")
-		fmt.Fprint(w, "Received code. You can now safely close this browser window.")
-	}))
-	authCode := <-codeCh
+	endpoint := "https://oauth2.googleapis.com/device/code"
+	var responseUserCode DeviceAuthResp
 
-	tok, err := config.Exchange(context.TODO(), authCode)
+	response, err := http.PostForm(endpoint, url.Values{"client_id": {config.ClientID}, "scope": {"https://www.googleapis.com/auth/drive.file"}})
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("Unable to retrieve token from web %v", err))
+		panic(err)
 	}
-	return tok, nil
+	byteArray, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		panic(err)
+	}
+	response.Body.Close()
+	err = json.Unmarshal(byteArray, &responseUserCode)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("Go to the following link in your browser: \nhttps://www.google.com/device\nThen, type: %s\n", responseUserCode.UserCode)
+
+	endpoint = "https://oauth2.googleapis.com/token"
+
+	for i := 0; i < responseUserCode.ExpiresIn / responseUserCode.Interval + 5; i++ {
+		response, err = http.PostForm(endpoint, url.Values{
+			"client_id": {config.ClientID}, "client_secret": {config.ClientSecret}, "device_code": {responseUserCode.DeviceCode}, "grant_type": {"urn:ietf:params:oauth:grant-type:device_code"}})
+		if err != nil {
+			panic(err)
+		}
+		if response.StatusCode != http.StatusPreconditionRequired{
+			break
+		}
+		time.Sleep(time.Duration(responseUserCode.Interval) * time.Second)
+	}
+	if response.StatusCode != http.StatusOK {
+		panic(errors.New("authorization error in google server or not authorized"))
+	}
+	byteArray, err = ioutil.ReadAll(response.Body)
+	if err != nil {
+		panic(err)
+	}
+	response.Body.Close()
+	var responsePooling PoolingResp
+	err = json.Unmarshal(byteArray, &responsePooling)
+	if err != nil {
+		panic(err)
+	}
+
+	return &oauth2.Token{
+		AccessToken:  responsePooling.AccessToken,
+		TokenType:    responsePooling.TokenType,
+		RefreshToken: responsePooling.RefreshToken,
+		Expiry:       time.Time{},
+	}, nil
 }
 
 // Retrieves a token from a local file.
@@ -140,22 +181,14 @@ func saveToken(path string, token *oauth2.Token) error {
 	return nil
 }
 
-func getService() (*drive.Service, error) {
-	url := Config.CredentialUrl
-
-	response, err := http.Get(url)
-	defer response.Body.Close()
-	if err != nil {
-		return nil, errors.New(fmt.Sprintf("Unable to connect online credential file: %v", err))
-	}
-	byteArray, err := ioutil.ReadAll(response.Body)
-	if err != nil {
-		return nil, errors.New(fmt.Sprintf("Unable to load online credential file: %v", err))
-	}
-
-	config, err := google.ConfigFromJSON(byteArray, drive.DriveScope)
-	if err != nil {
-		return nil, errors.New(fmt.Sprintf("Unable to parse client secret file to config: %v", err))
+func getService(clientID string, clientSecret string) (*drive.Service, error) {
+	config := &oauth2.Config{
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
+		Endpoint: oauth2.Endpoint{
+			AuthURL:  "https://accounts.google.com/o/oauth2/auth",
+			TokenURL: "https://oauth2.googleapis.com/token",
+		},
 	}
 	client, err := getClient(config)
 	if err != nil {
@@ -178,8 +211,8 @@ func ListRepository() []string {
 	return result
 }
 
-func ListDirectory(repository string) ([]string, error) {
-	service, err := getService()
+func ListDirectory(clientID string, clientSecret string, repository string) ([]string, error) {
+	service, err := getService(clientID, clientSecret)
 	if err != nil {
 		return nil, errors.New(fmt.Sprintf("Unable to get service: %v", err))
 	}
@@ -205,8 +238,8 @@ func ListDirectory(repository string) ([]string, error) {
 	return results, nil
 }
 
-func getDirectory(repository string, directory string) (*drive.Service, *drive.File, error) {
-	service, err := getService()
+func getDirectory(clientID string, clientSecret string, repository string, directory string) (*drive.Service, *drive.File, error) {
+	service, err := getService(clientID, clientSecret)
 	if err != nil {
 		return nil, nil, errors.New(fmt.Sprintf("Unable to get service: %v", err))
 	}
@@ -217,8 +250,8 @@ func getDirectory(repository string, directory string) (*drive.Service, *drive.F
 	return service, result.Files[0], nil
 }
 
-func ListFiles(repository string, directory string) ([]string, error) {
-	service, file, err := getDirectory(repository, directory)
+func ListFiles(clientID string, clientSecret string, repository string, directory string) ([]string, error) {
+	service, file, err := getDirectory(clientID, clientSecret, repository, directory)
 	if err != nil {
 		return nil, err
 	}
@@ -258,8 +291,8 @@ func Rev(s string) string {
 	return string(runes)
 }
 
-func DownloadAndSave(path string, repository string, directory string, fileName string, saveForce bool, unfreeze bool) error {
-	service, file, err := getDirectory(repository, directory)
+func DownloadAndSave(clientID string, clientSecret string, path string, repository string, directory string, fileName string, saveForce bool, unfreeze bool) error {
+	service, file, err := getDirectory(clientID, clientSecret, repository, directory)
 	if err != nil {
 		return err
 	}
@@ -271,8 +304,8 @@ func DownloadAndSave(path string, repository string, directory string, fileName 
 		return errors.New("error while searching the targeted file")
 	}
 	log.Println(fmt.Sprintf("Starting download from %s/%s/%s", repository, directory, fileName))
-	fileSize, err := GetFileSize(repository, directory, fileName)
-	if err != nil{
+	fileSize, err := GetFileSize(clientID, clientSecret, repository, directory, fileName)
+	if err != nil {
 		return err
 	}
 	var response *http.Response
@@ -326,16 +359,16 @@ func DownloadAndSave(path string, repository string, directory string, fileName 
 		log.Println(fmt.Sprintf("Starting unfreezing: %s/%s/%s", repository, directory, fileName))
 		hasPixz := false
 		pixzPath, _ := exec.LookPath("pixz")
-		if pixzPath != ""{
+		if pixzPath != "" {
 			hasPixz = true
 		}
-		if hasPixz{
+		if hasPixz {
 			prevDir, err := os.Getwd()
-			if err != nil{
+			if err != nil {
 				return err
 			}
 			err = os.Chdir(path)
-			if err != nil{
+			if err != nil {
 				return err
 			}
 			err = exec.Command("sh", "-c", fmt.Sprintf("pixz -x %s < %s | tar x",
@@ -345,10 +378,10 @@ func DownloadAndSave(path string, repository string, directory string, fileName 
 				return err
 			}
 			err = os.Chdir(prevDir)
-			if err != nil{
+			if err != nil {
 				return err
 			}
-		}else {
+		} else {
 			log.Println("pixz not installed. For bigger data foler, we highly recommend installing pixz.")
 			xzArchiver := archiver.NewTarXz()
 			xzArchiver.OverwriteExisting = saveForce
@@ -379,8 +412,8 @@ func DownloadAndSave(path string, repository string, directory string, fileName 
 	return nil
 }
 
-func GetFileSize(repository string, directory string, fileName string) (int64, error) {
-	service, file, err := getDirectory(repository, directory)
+func GetFileSize(clientID string, clientSecret string, repository string, directory string, fileName string) (int64, error) {
+	service, file, err := getDirectory(clientID, clientSecret, repository, directory)
 	if err != nil {
 		return 0, err
 	}
@@ -398,8 +431,8 @@ func GetFileSize(repository string, directory string, fileName string) (int64, e
 	return info.Size, nil
 }
 
-func CheckExists(repository string, directory string, fileName string) (*string, *drive.File, error) {
-	service, file, err := getDirectory(repository, directory)
+func CheckExists(clientID string, clientSecret string, repository string, directory string, fileName string) (*string, *drive.File, error) {
+	service, file, err := getDirectory(clientID, clientSecret, repository, directory)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -417,7 +450,7 @@ func CheckExists(repository string, directory string, fileName string) (*string,
 	return &result.Files[0].Id, info, nil
 }
 
-func Upload(path string, repository string, directory string, fileOrFolderName string, fileForceCompress bool) error {
+func Upload(clientID string, clientSecret string, path string, repository string, directory string, fileOrFolderName string, fileForceCompress bool) error {
 	fpInfo, err := os.Stat(filepath.Join(path, fileOrFolderName))
 	if os.IsNotExist(err) {
 		return errors.New(fmt.Sprintf("File doesn't exist: %s", filepath.Join(path, fileOrFolderName)))
@@ -440,7 +473,7 @@ func Upload(path string, repository string, directory string, fileOrFolderName s
 		}
 		buffer = bufio.NewReader(fp)
 		fpInfo, err := fp.Stat()
-		if err != nil{
+		if err != nil {
 			return nil
 		}
 		bufferSize = fpInfo.Size()
@@ -462,25 +495,25 @@ func Upload(path string, repository string, directory string, fileOrFolderName s
 			return errors.New(fmt.Sprintf("File already exist: %s", filepath.Join(path, fileOrFolderName)))
 		}
 		prevDir, err := os.Getwd()
-		if err != nil{
+		if err != nil {
 			return err
 		}
 		err = os.Chdir(path)
-		if err != nil{
+		if err != nil {
 			return err
 		}
 		hasPixz := false
 		pixzPath, _ := exec.LookPath("pixz")
-		if pixzPath != ""{
+		if pixzPath != "" {
 			hasPixz = true
 		}
-		if hasPixz{
+		if hasPixz {
 			err = exec.Command("tar", "-cf", randomFileName, "--use-compress-program=pixz", fileOrFolderName).Run()
 			if err != nil {
 				os.Remove(filepath.Join(path, randomFileName))
 				return err
 			}
-		}else {
+		} else {
 			log.Println("pixz not installed. For bigger data foler, we highly recommend installing pixz.")
 			xzArchiver := archiver.NewTarXz()
 			err = xzArchiver.Archive([]string{fileOrFolderName}, randomFileName)
@@ -491,7 +524,7 @@ func Upload(path string, repository string, directory string, fileOrFolderName s
 		}
 		defer os.Remove(filepath.Join(path, randomFileName))
 		err = os.Chdir(prevDir)
-		if err != nil{
+		if err != nil {
 			return err
 		}
 		fp, err := os.Open(filepath.Join(path, randomFileName))
@@ -501,17 +534,17 @@ func Upload(path string, repository string, directory string, fileOrFolderName s
 		}
 		buffer = bufio.NewReader(fp)
 		fpInfo, err := fp.Stat()
-		if err != nil{
+		if err != nil {
 			return nil
 		}
 		bufferSize = fpInfo.Size()
 	}
 
-	service, file, err := getDirectory(repository, directory)
+	service, file, err := getDirectory(clientID, clientSecret, repository, directory)
 	if err != nil {
 		return err
 	}
-	id, fileOnGd, err := CheckExists(repository, directory, googleDriveFileName)
+	id, fileOnGd, err := CheckExists(clientID, clientSecret, repository, directory, googleDriveFileName)
 	if err != nil {
 		return err
 	}
